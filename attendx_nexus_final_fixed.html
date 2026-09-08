@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AttendX Nexus</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f4f7fb;color:#172033}
+header{background:#1f4ed8;color:white;padding:20px} header h1{margin:0 0 5px}
+nav{display:flex;gap:8px;padding:10px;background:white;position:sticky;top:0;z-index:2}
+nav button,.actions button{border:0;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}
+nav button.active{background:#1f4ed8;color:white}
+main{max-width:1050px;margin:20px auto;padding:0 14px}.tab{display:none}.tab.active{display:block}
+.card{background:white;border:1px solid #e0e5ee;border-radius:14px;padding:18px;margin-bottom:16px}
+.grid,.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+label{font-weight:700}input,select,textarea{width:100%;padding:10px;margin-top:6px;border:1px solid #ccd4e0;border-radius:8px;box-sizing:border-box}
+textarea{min-height:130px}.actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.primary{background:#1f4ed8;color:white}.success{background:#168a4b;color:white}.danger{background:#c73535;color:white}.secondary{background:#e9eef7}
+.student{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:11px 0;border-bottom:1px solid #edf0f5}
+.present{background:#dff5e8!important;color:#116b3a!important}.absent{background:#fde2e2!important;color:#9d2020!important}
+.notice{padding:11px;border-radius:9px;background:#eef5ff;margin:10px 0}.warn{background:#fff5d9}.ok{background:#e5f8eb}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{text-align:center;background:#f5f7fb;padding:12px;border-radius:9px}.stat b{display:block;font-size:22px}
+.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:650px}th,td{border:1px solid #d8dee8;padding:8px}th{background:#eef2f7}
+.small{font-size:13px;color:#657083}
+@media(max-width:600px){.student{grid-template-columns:1fr 1fr 1fr}.student .name{grid-column:1/-1}.stats{grid-template-columns:1fr}}
+</style>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<header><h1>⚡ AttendX Nexus</h1><div>Your attendance command center • Database • Excel • Student Email</div></header>
+<nav>
+<button class="tabBtn active" data-tab="attendance">Take Attendance</button>
+<button class="tabBtn" data-tab="database">Excel Database</button>
+<button class="tabBtn" data-tab="manage">Manage</button>
+<button class="tabBtn" data-tab="setup">Email Setup</button>
+</nav>
+
+<main>
+<section id="attendance" class="tab active"><div class="card">
+<h2>Take Attendance</h2>
+<div class="grid">
+<label>Subject<select id="subjectSelect"></select></label>
+<label>Date<input id="dateInput" type="date"></label>
+</div>
+<div class="actions">
+<button class="secondary" id="allPresent">Mark All Present</button>
+<button class="secondary" id="allAbsent">Mark All Absent</button>
+<button class="success" id="saveAttendance">💾 Save Attendance</button>
+<button class="primary" id="sendMail">📧 Send Mail to Present Students</button>
+</div>
+<div id="mailNotice" class="notice warn">EmailJS is not configured yet. Open Email Setup.</div><div class="small" style="margin-top:6px">If sending fails, the exact EmailJS error will appear here after you click the button.</div>
+<div id="studentsList"></div>
+<div class="stats">
+<div class="stat"><b id="presentCount">0</b>Present</div>
+<div class="stat"><b id="absentCount">0</b>Absent</div>
+<div class="stat"><b id="totalCount">0</b>Total</div>
+</div>
+</div></section>
+
+<section id="database" class="tab"><div class="card">
+<h2>🗃️ Excel-like Database</h2>
+<div class="actions"><input id="dbSearch" placeholder="Search records"><button class="primary" id="exportCsv">⬇️ Export CSV</button><button class="success" id="exportExcel">📊 Export Excel</button></div>
+<p class="small">Records are stored in this browser using IndexedDB. Export creates a real .xlsx Excel workbook. If the Excel library is unavailable, the app falls back to CSV.</p>
+<div class="tablewrap"><table><thead><tr><th>Date</th><th>Subject</th><th>Reg. No.</th><th>Student</th><th>Email</th><th>Status</th></tr></thead><tbody id="dbBody"></tbody></table></div>
+</div></section>
+
+<section id="manage" class="tab">
+<div class="card"><h2>👨‍🎓 Students</h2>
+<div class="row"><input id="studentReg" placeholder="Registration number"><input id="studentName" placeholder="Student name"><input id="studentEmail" type="email" placeholder="Student email"><button class="primary" id="addStudent">Add Student</button></div>
+<div id="studentList"></div></div>
+<div class="card"><h2>📚 Subjects</h2>
+<div class="row"><input id="subjectName" placeholder="Subject name"><button class="primary" id="addSubject">Add Subject</button></div>
+<div id="subjectList"></div></div>
+</section>
+
+<section id="setup" class="tab"><div class="card">
+<h2>📧 Email Sending Setup</h2>
+<p>This version uses <b>EmailJS</b>. Create an EmailJS account, connect an email service, create a template, then paste the three identifiers here. The template recipient must be <code>{{to_email}}</code>. Use <b>Send Test Email</b> before sending attendance emails.</p>
+<ol><li>Get your <b>Public Key</b>.</li><li>Get your <b>Service ID</b>.</li><li>Get your <b>Template ID</b>.</li><li>Enter them below and save.</li></ol>
+<div class="grid">
+<label>Public Key<input id="publicKey" placeholder="public_xxxxx"></label>
+<label>Service ID<input id="serviceId" placeholder="service_xxxxx"></label>
+<label>Template ID<input id="templateId" placeholder="template_xxxxx"></label>
+</div>
+<h3>Template variables</h3>
+<textarea readonly>To/Recipient: {{to_email}}
+Subject: Attendance marked for {{subject_name}}
+
+Hello {{student_name}},
+
+Your attendance for {{subject_name}} on {{attendance_date}} has been marked {{status}}.
+
+Regards,
+AttendX Nexus</textarea>
+<p class="small">Your EmailJS template should use <code>{{to_email}}</code> as the recipient and the other variables shown above.</p>
+<div class="actions">
+<button class="success" id="saveSettings">💾 Save Email Settings</button>
+<button class="secondary" id="checkSettings">Check Configuration</button>
+<button class="danger" id="clearSettings">Clear</button>
+</div>
+<div class="row" style="margin-top:10px">
+<label>Test recipient email<input id="testEmail" type="email" placeholder="your-email@example.com"></label>
+<button class="primary" id="testSend">📨 Send Test Email</button>
+</div>
+<div id="setupStatus" class="notice"></div>
+</div></section>
+</main>
+
+
+
+<script>
+"use strict";
+
+const DB="AttendXNexusDB", VER=1;
+let db, students=[], subjects=[], records=[], marks={};
+let emailSettings=JSON.parse(localStorage.getItem("attendXNexusEmailSettings")||"{}");
+
+const $ = id => document.getElementById(id);
+
+function esc(x){
+  return String(x??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB,VER);
+    r.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains("students"))
+        d.createObjectStore("students",{keyPath:"id",autoIncrement:true});
+      if(!d.objectStoreNames.contains("subjects"))
+        d.createObjectStore("subjects",{keyPath:"id",autoIncrement:true});
+      if(!d.objectStoreNames.contains("attendance"))
+        d.createObjectStore("attendance",{keyPath:"id",autoIncrement:true});
+    };
+    r.onsuccess=e=>{db=e.target.result;res();};
+    r.onerror=e=>rej(e.target.error);
+  });
+}
+
+function all(store){
+  return new Promise((res,rej)=>{
+    const r=db.transaction(store).objectStore(store).getAll();
+    r.onsuccess=()=>res(r.result);
+    r.onerror=()=>rej(r.error);
+  });
+}
+function put(store,obj){
+  return new Promise((res,rej)=>{
+    const r=db.transaction(store,"readwrite").objectStore(store).put(obj);
+    r.onsuccess=()=>res(r.result);
+    r.onerror=()=>rej(r.error);
+  });
+}
+function add(store,obj){
+  return new Promise((res,rej)=>{
+    const r=db.transaction(store,"readwrite").objectStore(store).add(obj);
+    r.onsuccess=()=>res(r.result);
+    r.onerror=()=>rej(r.error);
+  });
+}
+function del(store,id){
+  return new Promise((res,rej)=>{
+    const r=db.transaction(store,"readwrite").objectStore(store).delete(id);
+    r.onsuccess=()=>res();
+    r.onerror=()=>rej(r.error);
+  });
+}
+
+const stu=id=>students.find(x=>x.id==id);
+const sub=id=>subjects.find(x=>x.id==id)?.name||"Unknown";
+
+async function load(){
+  students=await all("students");
+  subjects=await all("subjects");
+  records=await all("attendance");
+  render();
+}
+
+function render(){
+  const old=$("subjectSelect").value;
+  $("subjectSelect").innerHTML=subjects.length
+    ? subjects.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("")
+    : "<option value=''>No subjects yet</option>";
+  if([...$("subjectSelect").options].some(o=>o.value===old))
+    $("subjectSelect").value=old;
+
+  renderStudents();
+  renderManage();
+  renderDB();
+  updateMail();
+}
+
+function renderStudents(){
+  $("studentsList").innerHTML=students.length
+    ? students.map(s=>{
+        const st=marks[s.id]||"";
+        return `<div class="student">
+          <div class="name">
+            <b>${esc(s.name)}</b>
+            <div class="small">Reg. No.: ${esc(s.regNo||"Not set")} · ${esc(s.email||"No email")}</div>
+          </div>
+          <button class="${st==="Present"?"present":"secondary"}" data-mark="${s.id}|Present">Present</button>
+          <button class="${st==="Absent"?"absent":"secondary"}" data-mark="${s.id}|Absent">Absent</button>
+        </div>`;
+      }).join("")
+    : "<div class='notice warn'>Add students in Manage first.</div>";
+
+  document.querySelectorAll("[data-mark]").forEach(b=>{
+    b.addEventListener("click",()=>{
+      const [id,st]=b.dataset.mark.split("|");
+      marks[id]=st;
+      renderStudents();
+    });
+  });
+
+  $("presentCount").textContent=Object.values(marks).filter(x=>x==="Present").length;
+  $("absentCount").textContent=Object.values(marks).filter(x=>x==="Absent").length;
+  $("totalCount").textContent=students.length;
+}
+
+function renderManage(){
+  $("studentList").innerHTML=students.map(s=>`
+    <div class="student">
+      <div class="name"><b>${esc(s.name)}</b>
+        <div class="small">Reg. No.: ${esc(s.regNo||"Not set")} · ${esc(s.email||"No email")}</div>
+      </div>
+      <button class="secondary" data-edit="${s.id}">Edit</button>
+      <button class="danger" data-del-stu="${s.id}">Delete</button>
+    </div>`).join("");
+
+  document.querySelectorAll("[data-edit]").forEach(b=>{
+    b.addEventListener("click",async()=>{
+      const s=stu(b.dataset.edit);
+      const r=prompt("Registration number:",s.regNo||"");
+      if(r===null)return;
+      const n=prompt("Student name:",s.name);
+      if(n===null)return;
+      const e=prompt("Student email:",s.email||"");
+      if(e===null)return;
+      await put("students",{id:s.id,regNo:r.trim(),name:n.trim()||s.name,email:e.trim()});
+      await load();
+    });
+  });
+
+  document.querySelectorAll("[data-del-stu]").forEach(b=>{
+    b.addEventListener("click",async()=>{
+      if(confirm("Delete this student?")){
+        await del("students",+b.dataset.delStu);
+        delete marks[b.dataset.delStu];
+        await load();
+      }
+    });
+  });
+
+  $("subjectList").innerHTML=subjects.map(s=>`
+    <div class="student">
+      <div class="name"><b>${esc(s.name)}</b></div>
+      <button class="secondary" data-edit-sub="${s.id}">Edit</button>
+      <button class="danger" data-del-sub="${s.id}">Delete</button>
+    </div>`).join("");
+
+  document.querySelectorAll("[data-edit-sub]").forEach(b=>{
+    b.addEventListener("click",async()=>{
+      const s=subjects.find(x=>x.id==b.dataset.editSub);
+      const n=prompt("Subject name:",s.name);
+      if(n&&n.trim()){
+        await put("subjects",{id:s.id,name:n.trim()});
+        await load();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-del-sub]").forEach(b=>{
+    b.addEventListener("click",async()=>{
+      if(confirm("Delete this subject?")){
+        await del("subjects",+b.dataset.delSub);
+        await load();
+      }
+    });
+  });
+}
+
+function renderDB(){
+  const q=$("dbSearch").value.toLowerCase();
+  const rows=records.filter(r=>{
+    const s=stu(r.studentId);
+    return [r.date,sub(r.subjectId),s?.regNo,s?.name,s?.email,r.status]
+      .join(" ").toLowerCase().includes(q);
+  });
+
+  $("dbBody").innerHTML=rows.length
+    ? rows.map(r=>{
+        const s=stu(r.studentId);
+        return `<tr>
+          <td>${esc(r.date)}</td><td>${esc(sub(r.subjectId))}</td>
+          <td>${esc(s?.regNo||"")}</td><td>${esc(s?.name||"")}</td>
+          <td>${esc(s?.email||"")}</td><td>${esc(r.status)}</td>
+        </tr>`;
+      }).join("")
+    : "<tr><td colspan='6'>No records.</td></tr>";
+}
+
+function configured(){
+  return !!(emailSettings.publicKey && emailSettings.serviceId && emailSettings.templateId);
+}
+
+function updateMail(){
+  $("mailNotice").className="notice "+(configured()?"ok":"warn");
+  $("mailNotice").innerHTML=configured()
+    ? "✅ EmailJS settings are saved. Make sure your EmailJS template recipient is <code>{{to_email}}</code>."
+    : "⚠️ EmailJS is not configured. Open <b>Email Setup</b> and enter all three IDs.";
+}
+
+function showEmailError(target,msg){
+  target.className="notice warn";
+  target.innerHTML="❌ <b>Email error:</b> "+esc(msg);
+}
+
+async function emailjsSend(templateParams){
+  if(!emailSettings.publicKey || !emailSettings.serviceId || !emailSettings.templateId){
+    throw new Error("EmailJS settings are incomplete.");
+  }
+  const response=await fetch("https://api.emailjs.com/api/v1.0/email/send",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      service_id:emailSettings.serviceId,
+      template_id:emailSettings.templateId,
+      user_id:emailSettings.publicKey,
+      template_params:templateParams
+    })
+  });
+  const text=await response.text();
+  if(!response.ok) throw new Error(text || ("EmailJS HTTP "+response.status));
+  return {status:response.status,text:text||"OK"};
+}
+
+async function sendMail(){
+  const btn=$("sendMail"), notice=$("mailNotice");
+  try{
+    if(!configured()){
+      notice.className="notice warn";
+      notice.textContent="⚠️ Configure EmailJS first in Email Setup.";
+      return;
+    }
+    const sid=Number($("subjectSelect").value), date=$("dateInput").value;
+    const present=students.filter(s=>marks[s.id]==="Present");
+    if(!sid){alert("Choose a subject.");return;}
+    if(!date){alert("Choose a date.");return;}
+    if(!present.length){alert("No students are marked Present.");return;}
+
+    const missing=present.filter(s=>!String(s.email||"").trim());
+    if(missing.length){
+      alert("Missing email address for:\n"+missing.map(s=>s.name).join("\n"));
+      return;
+    }
+    if(!confirm("Send attendance email to "+present.length+" Present student(s)?")) return;
+
+    btn.disabled=true;
+    const results=[];
+    for(let i=0;i<present.length;i++){
+      const s=present[i];
+      btn.textContent=`📨 Sending ${i+1}/${present.length}...`;
+      notice.className="notice";
+      notice.textContent=`Sending to ${s.name} (${s.email})...`;
+      try{
+        const response=await emailjsSend({
+          to_email:s.email,
+          student_name:s.name,
+          subject_name:sub(sid),
+          attendance_date:date,
+          status:"Present"
+        });
+        results.push(`✅ ${esc(s.name)} → ${esc(s.email)} (${esc(response.text)})`);
+      }catch(e){
+        results.push(`❌ ${esc(s.name)} → ${esc(s.email)}: ${esc(e.message||String(e))}`);
+      }
+      if(i<present.length-1) await new Promise(r=>setTimeout(r,1100));
+    }
+    const failed=results.filter(x=>x.startsWith("❌")).length;
+    notice.className="notice "+(failed?"warn":"ok");
+    notice.innerHTML="<b>📧 Send results</b><div style='margin-top:8px;line-height:1.7'>"+results.join("<br>")+"</div>";
+  }catch(e){
+    notice.className="notice warn";
+    notice.innerHTML="❌ <b>Email error:</b> "+esc(e.message||String(e));
+  }finally{
+    btn.disabled=false;
+    btn.textContent="📧 Send Mail to Present Students";
+  }
+}
+
+async function saveAttendance(){
+  const sid=Number($("subjectSelect").value), date=$("dateInput").value;
+  if(!sid||!date){alert("Choose a subject and date.");return false;}
+  if(!students.length){alert("Add students first.");return false;}
+
+  for(const s of students)
+    await add("attendance",{subjectId:sid,studentId:s.id,date,status:marks[s.id]||"Absent"});
+
+  records=await all("attendance");
+  renderDB();
+  return true;
+}
+
+function download(blob,name){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+function csv(){
+  const a=[
+    ["Date","Subject","Registration Number","Student","Email","Status"],
+    ...records.map(r=>{
+      const s=stu(r.studentId);
+      return [r.date,sub(r.subjectId),s?.regNo||"",s?.name||"",s?.email||"",r.status];
+    })
+  ];
+  download(
+    new Blob(["\ufeff"+a.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n")],
+    {type:"text/csv"}),
+    "attendance_database.csv"
+  );
+}
+
+function excel(){
+  try{
+    const rows=[
+      ["Date","Subject","Registration Number","Student","Email","Status"],
+      ...records.map(r=>{
+        const s=stu(r.studentId);
+        return [r.date,sub(r.subjectId),s?.regNo||"",s?.name||"",s?.email||"",r.status];
+      })
+    ];
+    if(window.XLSX){
+      const ws=XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"]=[{wch:14},{wch:24},{wch:20},{wch:28},{wch:34},{wch:12}];
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,"Attendance");
+      XLSX.writeFile(wb,"attendance_database.xlsx");
+      return;
+    }
+    const csvText="\ufeff"+rows.map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
+    download(new Blob([csvText],{type:"text/csv;charset=utf-8"}),"attendance_database.csv");
+    alert("Excel library could not load, so a CSV fallback was downloaded. CSV opens directly in Excel.");
+  }catch(e){
+    alert("Excel export failed: "+(e.message||String(e)));
+    console.error("Excel export error",e);
+  }
+}
+
+async function testSend(){
+  const target=$("testEmail").value.trim();
+  if(!target){alert("Enter a test recipient email.");return;}
+  if(!configured()){alert("Save the EmailJS settings first.");return;}
+  const btn=$("testSend");
+  btn.disabled=true;
+  btn.textContent="📨 Sending...";
+  try{
+    const response=await emailjsSend({
+      to_email:target,
+      student_name:"Test Student",
+      subject_name:"Test Subject",
+      attendance_date:new Date().toISOString().slice(0,10),
+      status:"Present"
+    });
+    $("setupStatus").className="notice ok";
+    $("setupStatus").textContent="✅ EmailJS accepted the test email: "+(response.text||"OK");
+  }catch(e){
+    $("setupStatus").className="notice warn";
+    $("setupStatus").innerHTML="❌ <b>EmailJS error:</b> "+esc(e.message||String(e));
+  }finally{
+    btn.disabled=false;
+    btn.textContent="📨 Send Test Email";
+  }
+}
+
+
+document.addEventListener("DOMContentLoaded",async()=>{
+  $("dateInput").value=new Date().toISOString().slice(0,10);
+
+  $("allPresent").addEventListener("click",()=>{
+    students.forEach(s=>marks[s.id]="Present");
+    renderStudents();
+  });
+
+  $("allAbsent").addEventListener("click",()=>{
+    students.forEach(s=>marks[s.id]="Absent");
+    renderStudents();
+  });
+
+  $("saveAttendance").addEventListener("click",async()=>{
+    try{
+      if(await saveAttendance()) alert("Attendance saved.");
+    }catch(e){
+      alert("Could not save attendance: "+(e?.message||e));
+    }
+  });
+
+  $("sendMail").addEventListener("click",sendMail);
+
+  $("subjectSelect").addEventListener("change",()=>{
+    marks={};
+    renderStudents();
+  });
+
+  $("addStudent").addEventListener("click",async()=>{
+    const r=$("studentReg").value.trim();
+    const n=$("studentName").value.trim();
+    const e=$("studentEmail").value.trim();
+
+    if(!r){alert("Enter a registration number.");return;}
+    if(!n){alert("Enter a student name.");return;}
+    if(students.some(s=>String(s.regNo||"").toLowerCase()===r.toLowerCase())){
+      alert("That registration number is already registered.");
+      return;
+    }
+
+    await add("students",{regNo:r,name:n,email:e});
+    $("studentReg").value="";
+    $("studentName").value="";
+    $("studentEmail").value="";
+    await load();
+  });
+
+  $("addSubject").addEventListener("click",async()=>{
+    const n=$("subjectName").value.trim();
+    if(!n){alert("Enter a subject name.");return;}
+    await add("subjects",{name:n});
+    $("subjectName").value="";
+    await load();
+  });
+
+  $("dbSearch").addEventListener("input",renderDB);
+  $("exportCsv").addEventListener("click",csv);
+  $("exportExcel").addEventListener("click",excel);
+
+  $("saveSettings").addEventListener("click",()=>{
+    emailSettings={
+      publicKey:$("publicKey").value.trim(),
+      serviceId:$("serviceId").value.trim(),
+      templateId:$("templateId").value.trim()
+    };
+    localStorage.setItem("attendXNexusEmailSettings",JSON.stringify(emailSettings));
+    updateMail();
+    $("setupStatus").className="notice ok";
+    $("setupStatus").textContent="✅ Settings saved on this device.";
+  });
+
+  $("checkSettings").addEventListener("click",()=>{
+    $("setupStatus").className="notice "+(configured()?"ok":"warn");
+    $("setupStatus").textContent=configured()
+      ?"✅ All three EmailJS identifiers are present."
+      :"⚠️ One or more EmailJS fields are missing.";
+  });
+
+  $("testSend").addEventListener("click",testSend);
+
+  $("clearSettings").addEventListener("click",()=>{
+    localStorage.removeItem("attendXNexusEmailSettings");
+    emailSettings={};
+    $("publicKey").value="";
+    $("serviceId").value="";
+    $("templateId").value="";
+    updateMail();
+    $("setupStatus").textContent="Settings cleared.";
+  });
+
+  document.querySelectorAll(".tabBtn").forEach(b=>{
+    b.addEventListener("click",()=>{
+      document.querySelectorAll(".tabBtn").forEach(x=>x.classList.remove("active"));
+      document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+      b.classList.add("active");
+      $(b.dataset.tab).classList.add("active");
+    });
+  });
+
+  $("publicKey").value=emailSettings.publicKey||"";
+  $("serviceId").value=emailSettings.serviceId||"";
+  $("templateId").value=emailSettings.templateId||"";
+
+  try{
+    await openDB();
+    await load();
+    updateMail();
+  }catch(e){
+    console.error(e);
+    alert("Could not open the local database.");
+  }
+});
+</script>
+
+</body></html>
